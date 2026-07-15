@@ -1,5 +1,3 @@
-# 02_extract_patches.py
-
 from pathlib import Path
 import json
 import math
