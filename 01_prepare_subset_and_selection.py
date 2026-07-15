@@ -1,5 +1,3 @@
-# 01_prepare_subset_and_selection.py
-
 from pathlib import Path
 import hashlib
 import json
