@@ -456,7 +456,11 @@ def write_audit_csv(path: Path, items: Sequence[dict]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=Path("data/exp2_question_subset.csv"))
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=Path("data/processed/exp2_question_subset.csv"),
+    )
     parser.add_argument("--output", type=Path, default=Path("vqa_paraphrases.json"))
     parser.add_argument(
         "--audit-output",

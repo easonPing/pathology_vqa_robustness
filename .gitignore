@@ -1,2 +1,15 @@
 __pycache__/
 *.pyc
+*.egg-info/
+
+# Large local experiment assets. Track their manifests, not the payloads.
+data/features/survey_prompt_feature/TCGA_patch_feat/
+data/features/survey_prompt_feature/BCNB_patch_feat/
+data/images/TCGA/
+data/images/BCNB/
+data/images/raw_wsi/
+
+# Local smoke-test artifacts and scheduler logs.
+outputs/smoke/
+logs/exp2_*.out
+logs/exp2_*.err

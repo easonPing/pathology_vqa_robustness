@@ -1,0 +1,28 @@
+# Install this file in a separate Python 3.10 Conda environment. SlideChat's
+# XTuner fork requires an older Transformers release than Qwen3.
+numpy>=1.26,<2
+pandas>=2.0
+torch==2.2.2
+torchvision==0.17.2
+transformers>=4.36.0,!=4.38.0,!=4.38.1,!=4.38.2,<=4.42.4
+accelerate
+safetensors
+sentencepiece
+bitsandbytes>=0.40.0.post4
+datasets>=2.16.0
+einops
+fairscale==0.4.13
+lagent>=0.1.2
+mmengine>=0.10.3
+openpyxl
+# Newer PEFT releases require Transformers cache APIs newer than SlideChat's
+# enforced <=4.42.4 upper bound.
+peft==0.11.1
+scikit-image
+scipy
+tiktoken
+timm==0.9.16
+transformers-stream-generator
+# DeepSpeed 0.19 uses torch.library.custom_op, which is unavailable in Torch 2.2.
+deepspeed==0.14.4
+mpi4py-mpich

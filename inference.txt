@@ -1,0 +1,10 @@
+-r data_processing.txt
+
+# Qwen3 text-only, Qwen3-VL, and InternVL3 inference environment.
+# Qwen3-VL support was added in Transformers 4.57.
+transformers>=4.57,<5
+accelerate>=1.0
+pillow>=10
+torchvision>=0.17
+timm>=0.9
+einops>=0.6
