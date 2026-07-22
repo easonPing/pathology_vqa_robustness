@@ -1,13 +1,21 @@
 """
-Stratified subset sampling for SlideBench-VQA datasets.
+Legacy stratified subset sampling for SlideBench-VQA datasets.
 
 - TCGA: ~400 rows, stratified across the 13 tasks in `Narrow Category`.
 - BCNB: ~200 rows, stratified across the 7 tasks in `Task`.
+
+This utility writes a 600-question *draft* only.  It must never overwrite the
+PhD-approved 598-question files under ``data/processed``.
 """
+
+from pathlib import Path
 
 import pandas as pd
 
 RANDOM_STATE = 42  # reproducible draw
+ROOT = Path(__file__).resolve().parent
+BENCHMARK_ROOT = ROOT / "data/raw/benchmarks"
+DRAFT_ROOT = ROOT / "data/processed/sampling_drafts"
 
 
 def allocate(counts: pd.Series, total: int) -> pd.Series:
@@ -74,8 +82,8 @@ def build_id_list(tcga_sample: pd.DataFrame, bcnb_sample: pd.DataFrame) -> pd.Da
 
 
 def main() -> None:
-    tcga = pd.read_csv("SlideBench-VQA-TCGA.csv")
-    bcnb = pd.read_csv("SlideBench-VQA-BCNB.csv")
+    tcga = pd.read_csv(BENCHMARK_ROOT / "SlideBench-VQA-TCGA.csv")
+    bcnb = pd.read_csv(BENCHMARK_ROOT / "SlideBench-VQA-BCNB.csv")
 
     tcga_sample = stratified_sample(tcga, "Narrow Category", total=400)
     bcnb_sample = stratified_sample(bcnb, "Task", total=200)
@@ -83,15 +91,21 @@ def main() -> None:
     report("TCGA", tcga, tcga_sample, "Narrow Category")
     report("BCNB", bcnb, bcnb_sample, "Task")
 
-    tcga_sample.to_csv("SlideBench-VQA-TCGA-sample400.csv", index=False)
-    bcnb_sample.to_csv("SlideBench-VQA-BCNB-sample200.csv", index=False)
+    DRAFT_ROOT.mkdir(parents=True, exist_ok=True)
+    tcga_sample.to_csv(
+        DRAFT_ROOT / "SlideBench-VQA-TCGA-sample400.csv", index=False
+    )
+    bcnb_sample.to_csv(
+        DRAFT_ROOT / "SlideBench-VQA-BCNB-sample200.csv", index=False
+    )
 
     id_list = build_id_list(tcga_sample, bcnb_sample)
-    id_list.to_csv("exp2_question_subset.csv", index=False)
+    id_list.to_csv(DRAFT_ROOT / "exp2_question_subset_600_draft.csv", index=False)
 
     print("\nWrote SlideBench-VQA-TCGA-sample400.csv and "
           "SlideBench-VQA-BCNB-sample200.csv")
-    print(f"Wrote exp2_question_subset.csv: {len(id_list)} questions "
+    print(f"Wrote {DRAFT_ROOT / 'exp2_question_subset_600_draft.csv'}: "
+          f"{len(id_list)} questions "
           f"({(id_list['dataset'] == 'TCGA').sum()} TCGA + "
           f"{(id_list['dataset'] == 'BCNB').sum()} BCNB), "
           f"unique qids: {id_list['qid'].nunique()}")

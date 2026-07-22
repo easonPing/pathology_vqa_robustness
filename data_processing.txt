@@ -5,3 +5,8 @@ safetensors
 sentencepiece
 numpy>=1.26,<3
 pandas>=2.0
+pillow>=10
+# Python bindings used by scripts/data/extract_native_patches.py. The host
+# also needs the OpenSlide and libvips shared libraries.
+openslide-python>=1.3
+pyvips>=2.2

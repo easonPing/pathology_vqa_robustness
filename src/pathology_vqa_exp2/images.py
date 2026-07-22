@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+from PIL import Image
 
 
 REQUIRED_IMAGE_MANIFEST_COLUMNS = {
@@ -79,6 +81,7 @@ def load_native_image_manifest(
 
     image_sets: dict[str, NativeImageSet] = {}
     slide_signatures: dict[tuple[str, str], tuple[tuple[str, ...], ...]] = {}
+    verified_files: dict[Path, str] = {}
     for qid, group in frame.groupby("qid", sort=False):
         if not qid:
             raise ValueError("Image manifest contains an empty qid")
@@ -137,16 +140,59 @@ def load_native_image_manifest(
             if not raw_path:
                 raise ValueError(f"{qid}/{patch_name}: found row has no image_path")
             path = Path(raw_path)
-            if not path.is_absolute():
-                path = repo_root / path
-            path = path.resolve()
+            if path.is_absolute():
+                raise ValueError(
+                    f"{qid}/{patch_name}: image_path must be repository-relative"
+                )
+            path = (repo_root / path).resolve()
+            try:
+                path.relative_to(repo_root)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{qid}/{patch_name}: image_path escapes the repository"
+                ) from exc
             if path.name != patch_name:
                 raise ValueError(
                     f"{qid}: image_path basename {path.name!r} does not match "
                     f"patch_name {patch_name!r}"
                 )
-            if require_files and not path.is_file():
-                raise FileNotFoundError(f"{qid}: image does not exist: {path}")
+            if require_files:
+                previous_checksum = verified_files.get(path)
+                if previous_checksum is not None:
+                    if previous_checksum != checksum:
+                        raise ValueError(
+                            f"{qid}/{patch_name}: one file has conflicting checksums"
+                        )
+                else:
+                    if not path.is_file() or path.stat().st_size <= 0:
+                        raise FileNotFoundError(
+                            f"{qid}: image is missing or empty: {path}"
+                        )
+                    try:
+                        with Image.open(path) as image:
+                            image.load()
+                            if image.size != (224, 224) or image.mode != "RGB":
+                                raise ValueError(
+                                    f"{qid}/{patch_name}: expected 224x224 RGB, "
+                                    f"found {image.size}/{image.mode}"
+                                )
+                    except OSError as exc:
+                        raise ValueError(
+                            f"{qid}/{patch_name}: unreadable image: {path}"
+                        ) from exc
+                    digest = hashlib.sha256()
+                    with path.open("rb") as handle:
+                        for chunk in iter(
+                            lambda: handle.read(1024 * 1024), b""
+                        ):
+                            digest.update(chunk)
+                    observed_checksum = digest.hexdigest()
+                    if observed_checksum != checksum:
+                        raise ValueError(
+                            f"{qid}/{patch_name}: SHA256 mismatch: "
+                            f"{observed_checksum} != {checksum}"
+                        )
+                    verified_files[path] = observed_checksum
             paths.append(path)
 
         image_sets[qid] = NativeImageSet(

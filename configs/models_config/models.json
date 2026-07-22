@@ -1,0 +1,24 @@
+{
+  "slidechat": {
+    "model_id": "Qwen/Qwen2.5-7B-Instruct",
+    "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "source_repository": "https://github.com/uni-medical/SlideChat.git",
+    "source_revision": "fea92b61f46e0a3786b9674712454bb994c17eb7",
+    "source_path": "third_party/SlideChat",
+    "checkpoint_repository": "General-Medical-AI/SlideChat_Weight",
+    "checkpoint_revision": "98e630bc545c6ecbf9684b053b120d8fb9b7dc8a",
+    "checkpoint_path": "models/SlideChat_Weight/stage2_pth/mp_rank_00_model_states.pt"
+  },
+  "qwen3_text": {
+    "model_id": "Qwen/Qwen3-8B",
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+  },
+  "qwen3_vl": {
+    "model_id": "Qwen/Qwen3-VL-8B-Instruct",
+    "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+  },
+  "internvl3": {
+    "model_id": "OpenGVLab/InternVL3-8B",
+    "revision": "853e3a797a661694b1b8ece0cb72dc2b23e3dac9"
+  }
+}

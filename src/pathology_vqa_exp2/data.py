@@ -107,7 +107,7 @@ def load_questions(
         image_sets = load_native_image_manifest(
             image_manifest_path,
             repo_root=repo_root,
-            require_files=False,
+            require_files=require_images,
         )
         extra_image_qids = set(image_sets) - set(subset["qid"])
         if extra_image_qids:

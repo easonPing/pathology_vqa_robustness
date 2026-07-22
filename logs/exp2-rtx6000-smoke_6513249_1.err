@@ -1,0 +1,12 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:42<02:08, 42.79s/it]Loading checkpoint shards:  50%|█████     | 2/4 [01:26<01:26, 43.05s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [02:10<00:43, 43.54s/it]Loading checkpoint shards: 100%|██████████| 4/4 [02:34<00:00, 35.99s/it]Loading checkpoint shards: 100%|██████████| 4/4 [02:34<00:00, 38.64s/it]
+Keyword argument `add_vision_id` is not a valid argument for this processor and will be ignored.
+The following generation flags are not valid and may be ignored: ['temperature', 'top_p', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Traceback (most recent call last):
+  File "/u/efk4ps/UVA/RISE_lab/pathology_vqa_robustness/scripts/run_experiment.py", line 223, in <module>
+    main()
+  File "/u/efk4ps/UVA/RISE_lab/pathology_vqa_robustness/scripts/run_experiment.py", line 205, in main
+    run_native_patch_cases(
+  File "/u/efk4ps/UVA/RISE_lab/pathology_vqa_robustness/src/pathology_vqa_exp2/runner.py", line 513, in run_native_patch_cases
+    raise RuntimeError(row["error"])
+RuntimeError: TypeError: string indices must be integers

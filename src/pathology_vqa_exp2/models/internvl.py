@@ -87,13 +87,12 @@ class InternVLAdapter(ModelAdapter):
 
     @staticmethod
     def build_question(case: ExperimentCase) -> str:
-        if not case.image_paths:
-            raise ValueError(f"{case.qid}: InternVL3 requires at least one image")
-        image_prefix = "".join(
-            f"Image-{index}: <image>\n"
-            for index in range(1, len(case.image_paths) + 1)
-        )
-        return image_prefix + case.user_prompt
+        if len(case.image_paths) != 1:
+            raise ValueError(
+                f"{case.case_id}: InternVL3 single-patch inference requires "
+                f"exactly one image, found {len(case.image_paths)}"
+            )
+        return "<image>\n" + case.user_prompt
 
     def _load_pixel_values(self, image_paths: tuple[str, ...]):
         import torch
@@ -109,10 +108,17 @@ class InternVLAdapter(ModelAdapter):
         )
 
     def generate(self, case: ExperimentCase) -> str:
+        if len(case.image_paths) != 1:
+            raise ValueError(
+                f"{case.case_id}: InternVL3 single-patch inference requires "
+                f"exactly one image, found {len(case.image_paths)}"
+            )
         pixel_values = self._load_pixel_values(case.image_paths)
         generation_config = {
             "max_new_tokens": self.max_new_tokens,
             "do_sample": False,
+            "pad_token_id": self.tokenizer.eos_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
         }
         previous_system_message = self.model.system_message
         self.model.system_message = case.system_prompt or ""
@@ -122,7 +128,7 @@ class InternVLAdapter(ModelAdapter):
                 pixel_values,
                 self.build_question(case),
                 generation_config,
-                num_patches_list=[1] * len(case.image_paths),
+                num_patches_list=[1],
                 history=None,
                 return_history=False,
             )
@@ -138,8 +144,8 @@ class InternVLAdapter(ModelAdapter):
             "dtype": self.dtype_name,
             "max_new_tokens": self.max_new_tokens,
             "image_size": self.image_size,
-            "image_preprocessing": "one resized tensor per frozen patch",
-            "multi_image_order": "image_manifest_patch_index",
+            "image_preprocessing": "one resized tensor for one frozen patch",
+            "image_input_protocol": "one_frozen_patch_per_generation",
             "dynamic_tiling": False,
             "do_sample": False,
         }

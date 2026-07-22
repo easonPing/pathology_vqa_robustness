@@ -63,15 +63,20 @@ class QwenVLAdapter(ModelAdapter):
 
     @staticmethod
     def build_messages(case: ExperimentCase) -> list[dict[str, Any]]:
-        if not case.image_paths:
-            raise ValueError(f"{case.qid}: Qwen3-VL requires at least one image")
+        if len(case.image_paths) != 1:
+            raise ValueError(
+                f"{case.case_id}: Qwen3-VL single-patch inference requires "
+                f"exactly one image, found {len(case.image_paths)}"
+            )
         messages: list[dict[str, Any]] = []
         if case.system_prompt:
-            messages.append({"role": "system", "content": case.system_prompt})
-        content = [
-            {"type": "image", "image": image_path}
-            for image_path in case.image_paths
-        ]
+            messages.append(
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": case.system_prompt}],
+                }
+            )
+        content = [{"type": "image", "image": case.image_paths[0]}]
         content.append({"type": "text", "text": case.user_prompt})
         messages.append({"role": "user", "content": content})
         return messages
@@ -83,7 +88,6 @@ class QwenVLAdapter(ModelAdapter):
             self.build_messages(case),
             tokenize=True,
             add_generation_prompt=True,
-            add_vision_id=True,
             return_dict=True,
             return_tensors="pt",
         ).to(self.device)
@@ -108,6 +112,6 @@ class QwenVLAdapter(ModelAdapter):
             "device": self.device,
             "dtype": self.dtype_name,
             "max_new_tokens": self.max_new_tokens,
-            "multi_image_order": "image_manifest_patch_index",
+            "image_input_protocol": "one_frozen_patch_per_generation",
             "do_sample": False,
         }

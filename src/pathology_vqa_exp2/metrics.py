@@ -142,9 +142,20 @@ def compute_metrics(
     for model_key, model_frame in frame.groupby("model_key", sort=True):
         model_ids = sorted(set(model_frame.get("model_id", pd.Series(dtype=str))))
         model_id = model_ids[0] if len(model_ids) == 1 else ";".join(model_ids)
+        model_has_vote_status = (
+            "vote_status" in model_frame.columns
+            and model_frame["vote_status"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .ne("")
+            .any()
+        )
         for perturbation in PERTURBATION_GROUPS:
             per_question: list[dict[str, Any]] = []
             all_perturbed: list[str] = []
+            canonical_vote_statuses: list[str] = []
+            perturbed_vote_statuses: list[str] = []
             for qid, question_frame in model_frame.groupby("qid", sort=True):
                 anchor = question_frame[
                     (question_frame["question_variant"] == "canonical")
@@ -176,6 +187,13 @@ def compute_metrics(
                 per_question.append(row)
                 question_rows.append(row)
                 all_perturbed.extend(perturbed["predicted_option"].tolist())
+                if model_has_vote_status:
+                    canonical_vote_statuses.append(
+                        str(anchor_row.get("vote_status", ""))
+                    )
+                    perturbed_vote_statuses.extend(
+                        perturbed["vote_status"].fillna("").astype(str).tolist()
+                    )
 
             per_question_frame = pd.DataFrame(per_question)
             canonical_scores = per_question_frame["canonical_correct"].to_numpy(float)
@@ -198,6 +216,42 @@ def compute_metrics(
                     "canonical_accuracy": canonical_accuracy,
                     "perturbed_accuracy": perturbed_accuracy,
                     "accuracy_delta": canonical_accuracy - perturbed_accuracy,
+                    "canonical_invalid_rate": float(
+                        np.mean(
+                            model_frame.loc[
+                                (model_frame["question_variant"] == "canonical")
+                                & (model_frame["prompt_condition"] == "qa"),
+                                "predicted_option",
+                            ]
+                            == INVALID_OPTION
+                        )
+                    ),
+                    "perturbed_invalid_rate": float(
+                        np.mean(
+                            np.asarray(all_perturbed, dtype=object)
+                            == INVALID_OPTION
+                        )
+                    ),
+                    "canonical_tie_rate": (
+                        float(
+                            np.mean(
+                                np.asarray(canonical_vote_statuses, dtype=object)
+                                == "tie"
+                            )
+                        )
+                        if canonical_vote_statuses
+                        else float("nan")
+                    ),
+                    "perturbed_tie_rate": (
+                        float(
+                            np.mean(
+                                np.asarray(perturbed_vote_statuses, dtype=object)
+                                == "tie"
+                            )
+                        )
+                        if perturbed_vote_statuses
+                        else float("nan")
+                    ),
                     **intervals,
                     "consistency": float(per_question_frame["consistency"].mean()),
                     "flip_rate": float(per_question_frame["flip_rate"].mean()),
@@ -263,14 +317,15 @@ def write_metric_outputs(
         "",
         "Accuracy entries are estimate [question-level bootstrap 95% CI].",
         "",
-        "| Model | Perturbation | Canonical accuracy | Perturbed accuracy | Delta | Consistency | Flip-rate | Entropy (bits) |",
-        "|---|---|---:|---:|---:|---:|---:|---:|",
+        "| Model | Perturbation | Canonical accuracy | Perturbed accuracy | Delta | Consistency | Flip-rate | Entropy (bits) | Perturbed invalid | Perturbed tie |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in metrics.to_dict("records"):
         lines.append(
             "| {model_key} | {perturbation} | {canonical} | {perturbed} | "
             "{delta} | {consistency:.3f} | {flip_rate:.3f} | "
-            "{entropy_bits:.3f} |".format(
+            "{entropy_bits:.3f} | {perturbed_invalid_rate:.3f} | "
+            "{perturbed_tie_rate:.3f} |".format(
                 **row,
                 canonical=_format_estimate(
                     row["canonical_accuracy"],

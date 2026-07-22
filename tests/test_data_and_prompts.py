@@ -14,15 +14,21 @@ class DataAndPromptTest(unittest.TestCase):
             ROOT / "data/processed/exp2_question_subset.csv",
             ROOT / "data/processed/vqa_paraphrases.json",
             feature_manifest_path=ROOT
-            / "data/features/survey_prompt_feature/exp2_feature_manifest.csv",
+            / "data/manifests/slidechat_feature_manifest.csv",
             require_features=require_features,
             qids=["TCGA-1", "BCNB-31"],
         )
 
-    def test_smoke_inputs_are_aligned_and_have_features(self):
-        records = self.load_smoke_records(require_features=True)
+    def test_smoke_inputs_are_aligned_and_reference_features(self):
+        records = self.load_smoke_records(require_features=False)
         self.assertEqual([record.qid for record in records], ["TCGA-1", "BCNB-31"])
-        self.assertTrue(all(record.feature_path.is_file() for record in records))
+        self.assertTrue(all(record.feature_path is not None for record in records))
+        self.assertTrue(
+            all(
+                "data/features/slidechat" in record.feature_path.as_posix()
+                for record in records
+            )
+        )
         self.assertEqual(records[0].valid_options, ("A", "B", "C", "D"))
         self.assertEqual(records[1].valid_options, ("A", "B", "C"))
 

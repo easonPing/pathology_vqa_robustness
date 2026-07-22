@@ -1,0 +1,20 @@
+mode=test model=qwen3_text host=lotus job=6513250 task=0
+model_root=/bigtemp/efk4ps/pathology_vqa_robustness/models dtype=float16
+Quadro RTX 6000, 24576 MiB, 580.159.04
+selected 2 questions and 16 cases for qwen3_text
+[1/16] TCGA-1::canonical::qa: ok (INVALID)
+[2/16] TCGA-1::canonical::instruction: ok (D)
+[3/16] TCGA-1::p1::qa: ok (INVALID)
+[4/16] TCGA-1::p1::instruction: ok (C)
+[5/16] TCGA-1::p2::qa: ok (INVALID)
+[6/16] TCGA-1::p2::instruction: ok (C)
+[7/16] TCGA-1::p3::qa: ok (INVALID)
+[8/16] TCGA-1::p3::instruction: ok (D)
+[9/16] BCNB-31::canonical::qa: ok (INVALID)
+[10/16] BCNB-31::canonical::instruction: ok (C)
+[11/16] BCNB-31::p1::qa: ok (INVALID)
+[12/16] BCNB-31::p1::instruction: ok (C)
+[13/16] BCNB-31::p2::qa: ok (INVALID)
+[14/16] BCNB-31::p2::instruction: ok (C)
+[15/16] BCNB-31::p3::qa: ok (INVALID)
+[16/16] BCNB-31::p3::instruction: ok (C)

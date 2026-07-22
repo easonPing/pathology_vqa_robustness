@@ -1,5 +1,6 @@
-import unittest
+import math
 import tempfile
+import unittest
 from pathlib import Path
 
 import pandas as pd
@@ -53,6 +54,25 @@ class MetricsTest(unittest.TestCase):
         self.assertEqual(paraphrase["consistency"], 0.5)
         self.assertEqual(len(per_question), 6)
         self.assertEqual(len(positions), 15)
+        self.assertEqual(paraphrase["perturbed_invalid_rate"], 0.0)
+        self.assertTrue(math.isnan(paraphrase["perturbed_tie_rate"]))
+
+    def test_native_invalid_and_tie_rates_are_reported(self):
+        frame = make_predictions()
+        frame["vote_status"] = "unique_valid_winner"
+        target = (
+            (frame["qid"] == "TCGA-test")
+            & (frame["question_variant"] == "p1")
+            & (frame["prompt_condition"] == "qa")
+        )
+        frame.loc[target, "predicted_option"] = "INVALID"
+        frame.loc[target, "vote_status"] = "tie"
+        metrics, _, _ = compute_metrics(
+            frame, bootstrap_replicates=100, seed=42
+        )
+        paraphrase = metrics[metrics["perturbation"] == "paraphrase"].iloc[0]
+        self.assertAlmostEqual(paraphrase["perturbed_invalid_rate"], 1 / 6)
+        self.assertAlmostEqual(paraphrase["perturbed_tie_rate"], 1 / 6)
 
     def test_missing_combination_fails(self):
         frame = make_predictions().iloc[:-1]

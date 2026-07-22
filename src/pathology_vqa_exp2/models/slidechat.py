@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,29 @@ import pandas as pd
 from ..cache import configure_huggingface_cache
 from ..records import ExperimentCase
 from .base import ModelAdapter
+
+
+@contextmanager
+def _last_token_logits_only(output_embeddings):
+    """Avoid materializing prompt-token logits that generation never reads.
+
+    Transformers 4.42 computes logits for every input position in Qwen2.  For
+    a roughly 20k-token WSI sequence that creates an otherwise unused tensor
+    of more than 11 GiB after the FP32 cast.  Greedy autoregressive generation
+    only consumes the logits at the final position, so cropping the hidden
+    states immediately before the unchanged output projection is exact.
+    """
+
+    original_forward = output_embeddings.forward
+
+    def forward_last_token(hidden_states):
+        return original_forward(hidden_states[..., -1:, :])
+
+    output_embeddings.forward = forward_last_token
+    try:
+        yield
+    finally:
+        output_embeddings.forward = original_forward
 
 
 class SlideChatAdapter(ModelAdapter):
@@ -98,11 +122,23 @@ class SlideChatAdapter(ModelAdapter):
             raise RuntimeError("The SlideChat checkpoint did not match any model weights")
         del state_dict
 
-        self.model.to(device)
-        self.model.LongNet_encoder.to(device=device, dtype=torch_dtype)
-        self.model.projector.to(device=device, dtype=torch_dtype)
+        gpu_total_bytes = torch.cuda.get_device_properties(device).total_memory
+        self.gpu_total_memory_gib = gpu_total_bytes / (1024**3)
+        self.low_vram_component_swapping = gpu_total_bytes < 32 * (1024**3)
+        if self.low_vram_component_swapping:
+            # A 24 GB Turing card cannot hold the 7B LLM and LongNet's
+            # xFormers workspace for a ~20k-token slide at the same time.
+            # Keep only the component currently doing work on the GPU.
+            self.model.llm.to(device)
+            self.model.LongNet_encoder.to(device="cpu", dtype=torch_dtype)
+            self.model.projector.to(device="cpu", dtype=torch_dtype)
+        else:
+            self.model.to(device)
+            self.model.LongNet_encoder.to(device=device, dtype=torch_dtype)
+            self.model.projector.to(device=device, dtype=torch_dtype)
         self.model.eval()
-        self.model.llm.config.use_cache = True
+        # SlideChat's official test_full.py disables KV caching for generation.
+        self.model.llm.config.use_cache = False
         self.revision = getattr(self.model.llm.config, "_commit_hash", revision)
         self.missing_key_count = len(incompatible.missing_keys)
         self.unexpected_key_count = len(incompatible.unexpected_keys)
@@ -151,6 +187,13 @@ class SlideChatAdapter(ModelAdapter):
 
         if feature_path == self._cached_feature_path:
             return self._cached_pixel_values
+        if self.low_vram_component_swapping:
+            self._cached_feature_path = None
+            self._cached_pixel_values = None
+            self.model.llm.to("cpu")
+            torch.cuda.empty_cache()
+            self.model.LongNet_encoder.to(self.device)
+            self.model.projector.to(self.device)
         frame = pd.read_csv(feature_path)
         if frame.shape[1] < 512:
             raise ValueError(
@@ -172,6 +215,12 @@ class SlideChatAdapter(ModelAdapter):
                 token_embeddings=feature.to(self.model.llm.dtype).permute(1, 0, 2),
             )["encoder_out"]
             projected = self.model.projector(encoded.permute(1, 0, 2))
+        if self.low_vram_component_swapping:
+            del feature, encoded
+            self.model.LongNet_encoder.to("cpu")
+            self.model.projector.to("cpu")
+            torch.cuda.empty_cache()
+            self.model.llm.to(self.device)
         self._cached_feature_path = feature_path
         self._cached_pixel_values = projected
         return projected
@@ -233,12 +282,14 @@ class SlideChatAdapter(ModelAdapter):
                 else self.tokenizer.eos_token_id
             ),
         )
-        with torch.inference_mode():
+        output_embeddings = self.model.llm.get_output_embeddings()
+        with torch.inference_mode(), _last_token_logits_only(output_embeddings):
             generated = self.model.llm.generate(
                 **multimodal_inputs,
                 generation_config=generation_config,
                 stopping_criteria=stop_criteria,
                 bos_token_id=self.tokenizer.bos_token_id,
+                use_cache=False,
             )
         return self.tokenizer.decode(
             generated[0], skip_special_tokens=True
@@ -255,6 +306,10 @@ class SlideChatAdapter(ModelAdapter):
             "dtype": self.dtype_name,
             "max_new_tokens": self.max_new_tokens,
             "max_feature_tokens": self.max_feature_tokens,
+            "use_cache": False,
+            "generation_logits": "last_token_only_exact",
+            "gpu_total_memory_gib": round(self.gpu_total_memory_gib, 3),
+            "low_vram_component_swapping": self.low_vram_component_swapping,
             "missing_checkpoint_keys": self.missing_key_count,
             "unexpected_checkpoint_keys": self.unexpected_key_count,
             "do_sample": False,

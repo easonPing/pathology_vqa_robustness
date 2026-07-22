@@ -2,8 +2,12 @@
 # XTuner fork requires an older Transformers release than Qwen3.
 numpy>=1.26,<2
 pandas>=2.0
+pillow>=10
 torch==2.2.2
 torchvision==0.17.2
+# SlideChat LongNet uses this CUDA 12.1 wheel as the attention fallback on
+# Turing GPUs such as Quadro RTX 6000 (compute capability 7.5).
+xformers==0.0.25.post1
 transformers>=4.36.0,!=4.38.0,!=4.38.1,!=4.38.2,<=4.42.4
 accelerate
 safetensors

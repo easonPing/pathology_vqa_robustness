@@ -1,0 +1,18 @@
+{
+  "protocol_id": "five_category_unique_mode_v1",
+  "patches_per_slide": 30,
+  "inference_unit": "one_generation_per_patch",
+  "generation_sampling": false,
+  "vote_categories": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "INVALID"
+  ],
+  "aggregation": "unique_plurality",
+  "invalid_policy": "fifth_vote_category_no_retry",
+  "tie_policy": "aggregate_prediction_INVALID",
+  "retry_invalid_output": false,
+  "extra_tie_break_patch": false
+}
