@@ -11,7 +11,8 @@ live inside this repository tree but are excluded from Git.
   feature is unavailable.
 - Question variants: canonical plus three approved paraphrases (`p1`–`p3`).
 - Prompt conditions: exactly two bound conditions:
-  - `qa`: no system message and `Question: ... Answer:` formatting;
+  - `qa`: no system message, `Question: ... Answer:` formatting, and the
+    frozen JSON option-letter output instruction;
   - `instruction`: `You are an expert pathologist.` plus the prompt format
     specific to each model.
 - Models: SlideChat, Qwen3-8B text-only, Qwen3-VL-8B, and InternVL3-8B.
@@ -208,6 +209,7 @@ toggles.
 Question:
 {question}
 {non-empty options}
+Return your choice as JSON with only the option letter in the answer field, for example: {"answer": "C"}.
 Answer:
 ```
 
@@ -219,11 +221,51 @@ It has no system message.
 You are an expert pathologist.
 ```
 
-The user message remains model-specific:
+The exact model-specific user messages are shown below. Each `{non-empty
+options}` placeholder expands in letter order as `A. ...`, `B. ...`, and so on.
 
-- SlideChat: question plus options, matching its released test input shape;
-- Qwen3 text/VL: question plus options and a strict JSON answer instruction;
-- InternVL3: question plus options and its direct option-letter instruction.
+SlideChat:
+
+```text
+{question}
+{non-empty options}
+```
+
+Qwen3-8B text-only:
+
+```text
+{question}
+{non-empty options}
+Please show your choice in the answer field with only the choice letter, e.g., "answer": "C".
+```
+
+Qwen3-VL-8B:
+
+```text
+Question: {question}
+Options:
+{non-empty options}
+Please select the correct answer from the options above.
+Return your choice as JSON with only the option letter in the answer field, for example: {"answer": "C"}.
+Answer:
+```
+
+InternVL3-8B:
+
+```text
+{question}
+{non-empty options}
+Answer with the option's letter from the given choices directly.
+```
+
+These formats follow the pinned
+[SlideChat test script](https://github.com/uni-medical/SlideChat/blob/fea92b61f46e0a3786b9674712454bb994c17eb7/xtuner/tools/test_full.py#L510-L523),
+[Qwen3-8B model card](https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md#best-practices),
+[Qwen3-VL VLMEvalKit configuration](https://github.com/open-compass/VLMEvalKit/blob/d1832c0507c567bcc15b5bbd13a80fdcd8aacdeb/vlmeval/config.py#L1085-L1092)
+and its default
+[ImageMCQDataset prompt](https://github.com/open-compass/VLMEvalKit/blob/d1832c0507c567bcc15b5bbd13a80fdcd8aacdeb/vlmeval/dataset/image_mcq.py#L207-L230),
+and the paper-release
+[InternVL3 VLMEvalKit adapter](https://github.com/open-compass/VLMEvalKit/blob/1cc6d16d34b8f164523388edb0a9642ef8ab7314/vlmeval/vlm/internvl/utils.py#L235-L256).
 
 ## Validation and inference
 

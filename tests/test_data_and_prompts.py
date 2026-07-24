@@ -2,7 +2,14 @@ import unittest
 from pathlib import Path
 
 from pathology_vqa_exp2.data import build_experiment_cases, load_questions
-from pathology_vqa_exp2.prompts import EXPERT_SYSTEM_PROMPT, QWEN_MCQ_INSTRUCTION
+from pathology_vqa_exp2.prompts import (
+    EXPERT_SYSTEM_PROMPT,
+    INTERNVL_MCQ_INSTRUCTION,
+    QA_JSON_ANSWER_INSTRUCTION,
+    QWEN3_TEXT_MCQ_INSTRUCTION,
+    QWEN3_VL_MCQ_INSTRUCTION,
+    render_prompt,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,24 +60,52 @@ class DataAndPromptTest(unittest.TestCase):
             if case.question_variant == "canonical"
             and case.prompt_condition == "qa"
         )
-        self.assertIn(QWEN_MCQ_INSTRUCTION, instruction.user_prompt)
+        self.assertIn(QWEN3_TEXT_MCQ_INSTRUCTION, instruction.user_prompt)
+        self.assertIn(QA_JSON_ANSWER_INSTRUCTION, instruction.user_prompt)
+        self.assertTrue(instruction.user_prompt.endswith("\nAnswer:"))
         self.assertEqual(instruction.system_prompt, EXPERT_SYSTEM_PROMPT)
         self.assertTrue(qa.user_prompt.startswith("Question:\n"))
         self.assertTrue(qa.user_prompt.endswith("\nAnswer:"))
+        self.assertIn(QA_JSON_ANSWER_INSTRUCTION, qa.user_prompt)
         self.assertIsNone(qa.system_prompt)
 
-    def test_slidechat_native_matches_official_question_options_shape(self):
-        record = self.load_smoke_records()[0]
-        cases = build_experiment_cases([record], "slidechat")
-        instruction = next(
-            case
-            for case in cases
-            if case.question_variant == "canonical"
-            and case.prompt_condition == "instruction"
+    def test_all_model_prompt_templates_are_exact(self):
+        question = "Which diagnosis is most likely?"
+        options = {"A": "Alpha", "B": "Beta", "C": "", "D": "Delta"}
+        options_text = "A. Alpha\nB. Beta\nD. Delta"
+        expected_qa = (
+            f"Question:\n{question}\n{options_text}\n"
+            f"{QA_JSON_ANSWER_INSTRUCTION}\nAnswer:"
         )
-        self.assertNotIn(QWEN_MCQ_INSTRUCTION, instruction.user_prompt)
-        self.assertEqual(instruction.user_prompt.splitlines()[1], "A. Stage I")
-        self.assertEqual(instruction.system_prompt, EXPERT_SYSTEM_PROMPT)
+        expected_instruction = {
+            "slidechat": f"{question}\n{options_text}",
+            "qwen3_text": (
+                f"{question}\n{options_text}\n{QWEN3_TEXT_MCQ_INSTRUCTION}\n"
+                f"{QA_JSON_ANSWER_INSTRUCTION}\nAnswer:"
+            ),
+            "qwen3_vl": (
+                f"Question: {question}\nOptions:\n{options_text}\n"
+                f"{QWEN3_VL_MCQ_INSTRUCTION}\n"
+                f"{QA_JSON_ANSWER_INSTRUCTION}\nAnswer:"
+            ),
+            "internvl3": (
+                f"{question}\n{options_text}\n{INTERNVL_MCQ_INSTRUCTION}"
+            ),
+        }
+
+        for model_key, expected_user_prompt in expected_instruction.items():
+            with self.subTest(model=model_key, condition="qa"):
+                system_prompt, user_prompt = render_prompt(
+                    model_key, question, options, "qa"
+                )
+                self.assertIsNone(system_prompt)
+                self.assertEqual(user_prompt, expected_qa)
+            with self.subTest(model=model_key, condition="instruction"):
+                system_prompt, user_prompt = render_prompt(
+                    model_key, question, options, "instruction"
+                )
+                self.assertEqual(system_prompt, EXPERT_SYSTEM_PROMPT)
+                self.assertEqual(user_prompt, expected_user_prompt)
 
 
 if __name__ == "__main__":

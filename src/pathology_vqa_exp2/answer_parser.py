@@ -9,6 +9,42 @@ INVALID_OPTION = "INVALID"
 _FENCED_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.I | re.S)
 _JSON_OBJECT_RE = re.compile(r"\{[^{}]*\}", re.S)
 _THINK_RE = re.compile(r"<think>.*?</think>", re.I | re.S)
+_FINAL_ANSWER_MARKER_RE = re.compile(r"(?i)\bfinal\s+answer\b")
+_FINAL_ANSWER_OPTION_RE = re.compile(
+    r"""(?ixs)
+    (?<!\w)
+    (?:\*\*|__)?
+    final\s+["']?answer["']?
+    (?:\*\*|__)?
+    (?:\s*\([^\n)]{0,100}\))?
+    \s*
+    (?:(?:is|would\s+be)\s*[:=]?|[:=])?
+    \s*
+    [\s>*_`#✅-]*
+    ["']?
+    (?:option\s+)?
+    \(?([A-D])\)?
+    (?=[\s"'`*_.:),\]-]|$)
+    """
+)
+_ANSWER_OPTION_RE = re.compile(
+    r"""(?ixs)
+    (?<!\w)
+    (?:\*\*|__)?
+    (?:(?:correct|best)\s+)?
+    ["']?answer["']?
+    (?:\*\*|__)?
+    (?:\s*\([^\n)]{0,100}\))?
+    \s*
+    (?:(?:is|would\s+be)\s*[:=]?|[:=])?
+    \s*
+    [\s>*_`#✅-]*
+    ["']?
+    (?:option\s+)?
+    \(?([A-D])\)?
+    (?=[\s"'`*_.:),\]-]|$)
+    """
+)
 
 
 @dataclass(frozen=True)
@@ -57,8 +93,43 @@ def parse_answer(
     if len(json_answers) > 1:
         return ParsedAnswer(INVALID_OPTION, "ambiguous_json")
 
+    # Treat a declared final answer as authoritative.  If the model explicitly
+    # says "Final Answer" but does not put one valid option after the label,
+    # do not recover a speculative A-D mention elsewhere in the response.
+    if _FINAL_ANSWER_MARKER_RE.search(text):
+        final_answers = {
+            match.upper()
+            for match in _FINAL_ANSWER_OPTION_RE.findall(text)
+            if match.upper() in valid_options
+        }
+        if len(final_answers) == 1:
+            return ParsedAnswer(next(iter(final_answers)), "explicit")
+        if len(final_answers) > 1:
+            return ParsedAnswer(INVALID_OPTION, "ambiguous_explicit")
+        return ParsedAnswer(INVALID_OPTION, "non_option_final_answer")
+
+    # Parse answer-labelled conclusions before scanning "Option X" mentions.
+    # This prevents rejected alternatives such as "Option B is incorrect"
+    # from making an otherwise unambiguous "Correct Answer: A" look ambiguous.
+    labelled_answers = {
+        match.upper()
+        for match in _ANSWER_OPTION_RE.findall(text)
+        if match.upper() in valid_options
+    }
+    if len(labelled_answers) == 1:
+        return ParsedAnswer(next(iter(labelled_answers)), "explicit")
+    if len(labelled_answers) > 1:
+        return ParsedAnswer(INVALID_OPTION, "ambiguous_explicit")
+
     explicit_patterns = (
-        r"(?i)\b(?:final\s+)?answer\s*(?:is|:|=)?\s*\(?([A-D])\)?\b",
+        # Accept a JSON-like answer field even when the model omits the outer
+        # braces or generation stops immediately after the option letter.  A
+        # complete JSON object is still handled above and keeps method="json".
+        # Requiring the literal answer/final-answer field keeps this narrower
+        # than guessing from arbitrary option letters in free-form reasoning.
+        r"(?i)(?<!\w)(?:\*\*|__)?(?:final\s+)?[\"']?answer[\"']?"
+        r"(?:\*\*|__)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*"
+        r"(?:\*\*|__)?\s*[\"']?\(?([A-D])\)?(?:[\"']|\b)",
         r"(?i)\b(?:option|choice)\s*[:=]?\s*\(?([A-D])\)?\b",
     )
     explicit = {

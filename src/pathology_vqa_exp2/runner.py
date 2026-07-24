@@ -89,7 +89,7 @@ def _validate_resume(
     previous_metadata: dict[str, Any] | None,
 ) -> None:
     previous_adapter = (previous_metadata or {}).get("adapter", {})
-    for field in ("model_key", "model_id", "revision"):
+    for field in ("model_key", "model_id", "revision", "max_new_tokens"):
         previous_value = previous_adapter.get(field)
         current_value = adapter_metadata.get(field)
         if previous_value and current_value and previous_value != current_value:

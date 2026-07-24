@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -12,6 +13,79 @@ import pandas as pd
 from ..cache import configure_huggingface_cache
 from ..records import ExperimentCase
 from .base import ModelAdapter
+
+
+def _build_xformers_cutlass_attention():
+    """Build SlideChat's inference-only xFormers attention fallback.
+
+    The pinned SlideChat source selects FlashAttention on Ampere-or-newer GPUs
+    solely from compute capability.  If ``flash-attn`` is not installed, that
+    branch silently leaves ``flash_attn_func`` as ``None`` instead of trying
+    the xFormers CUTLASS implementation used on Turing GPUs.  This wrapper has
+    the same call and return contract as SlideChat's bundled xFormers branch:
+    it returns both the attention output and log-sum-exp values needed when
+    LongNet merges its dilated-attention segments.
+    """
+
+    try:
+        fmha = importlib.import_module("xformers.ops.fmha")
+        attn_bias_module = importlib.import_module("xformers.ops.fmha.attn_bias")
+        forward_with_lse = fmha.memory_efficient_attention_forward_requires_grad
+        cutlass_forward = fmha.cutlass.FwOp
+        lower_triangular_mask = attn_bias_module.LowerTriangularMask
+    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
+        raise RuntimeError(
+            "SlideChat LongNet has no usable attention backend. Install "
+            "flash-attn for this GPU or the pinned fallback "
+            "xformers==0.0.25.post1."
+        ) from exc
+
+    def xformers_cutlass_attention(
+        q,
+        k,
+        v,
+        dropout=0.0,
+        bias=None,
+        softmax_scale=None,
+        is_causal=False,
+    ):
+        if is_causal:
+            if bias is not None:
+                raise ValueError("Causal SlideChat attention cannot also use a bias")
+            bias = lower_triangular_mask()
+        return forward_with_lse(
+            q,
+            k,
+            v,
+            attn_bias=bias,
+            p=dropout,
+            scale=softmax_scale,
+            op=cutlass_forward,
+        )
+
+    return xformers_cutlass_attention
+
+
+def _configure_longnet_attention_backend() -> str:
+    """Ensure the imported LongNet modules reference a usable backend."""
+
+    # LongNet.py adds ``xtuner/model`` to sys.path and imports this vendored
+    # package as top-level ``torchscale``.  Patch that live namespace rather
+    # than creating a second ``xtuner.model.torchscale`` module tree.
+    flash_attention = importlib.import_module(
+        "torchscale.component.flash_attention"
+    )
+    multihead_attention = importlib.import_module(
+        "torchscale.component.multihead_attention"
+    )
+    if multihead_attention.flash_attn_func is not None:
+        return "slidechat_auto"
+
+    fallback = _build_xformers_cutlass_attention()
+    # multihead_attention imported the symbol by value, so patch both bindings.
+    flash_attention.flash_attn_func = fallback
+    multihead_attention.flash_attn_func = fallback
+    return "xformers_cutlass_fallback"
 
 
 @contextmanager
@@ -49,7 +123,7 @@ class SlideChatAdapter(ModelAdapter):
         model_id: str = "Qwen/Qwen2.5-7B-Instruct",
         device: str = "auto",
         dtype: str = "float16",
-        max_new_tokens: int = 64,
+        max_new_tokens: int = 512,
         max_feature_tokens: int = 38_400,
         revision: str | None = None,
     ) -> None:
@@ -83,6 +157,7 @@ class SlideChatAdapter(ModelAdapter):
         if dtype not in dtype_map:
             raise ValueError(f"Unsupported dtype: {dtype}")
         torch_dtype = dtype_map[dtype]
+        self.longnet_attention_backend = _configure_longnet_attention_backend()
 
         self.model_id = model_id
         self.device = device
@@ -306,6 +381,7 @@ class SlideChatAdapter(ModelAdapter):
             "dtype": self.dtype_name,
             "max_new_tokens": self.max_new_tokens,
             "max_feature_tokens": self.max_feature_tokens,
+            "longnet_attention_backend": self.longnet_attention_backend,
             "use_cache": False,
             "generation_logits": "last_token_only_exact",
             "gpu_total_memory_gib": round(self.gpu_total_memory_gib, 3),

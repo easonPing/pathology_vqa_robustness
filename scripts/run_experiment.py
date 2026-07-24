@@ -67,6 +67,28 @@ def parse_args() -> argparse.Namespace:
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--qids", nargs="+", help="Explicit frozen question IDs")
     selection.add_argument("--all", action="store_true", help="Run all frozen questions")
+    parser.add_argument(
+        "--num-shards",
+        type=int,
+        default=1,
+        help="Split the selected questions into this many contiguous shards",
+    )
+    parser.add_argument(
+        "--shard-index",
+        type=int,
+        default=0,
+        help="Zero-based contiguous question shard to run",
+    )
+    parser.add_argument(
+        "--question-range",
+        type=int,
+        nargs=2,
+        metavar=("START", "END"),
+        help=(
+            "Select the zero-based half-open question range [START, END) "
+            "before optional sharding"
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--subset", type=Path, default=DEFAULT_SUBSET)
     parser.add_argument("--paraphrases", type=Path, default=DEFAULT_PARAPHRASES)
@@ -77,7 +99,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--revision")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--dtype")
-    parser.add_argument("--max-new-tokens", type=int, default=64)
+    parser.add_argument("--max-new-tokens", type=int, default=512)
+    parser.add_argument(
+        "--prompt-condition",
+        choices=("all", "qa", "instruction"),
+        default="all",
+        help="Run both prompt conditions or only the selected condition",
+    )
     parser.add_argument("--image-size", type=int, default=448)
     parser.add_argument(
         "--slidechat-repo",
@@ -180,10 +208,53 @@ def main() -> None:
         ),
         qids=None if args.all else args.qids,
     )
+    selected_record_count = len(records)
+    range_start = 0
+    range_end = selected_record_count
+    if args.question_range is not None:
+        range_start, range_end = args.question_range
+        if not 0 <= range_start < range_end <= selected_record_count:
+            raise SystemExit(
+                "--question-range must satisfy "
+                f"0 <= START < END <= {selected_record_count}; "
+                f"found [{range_start}, {range_end})"
+            )
+        records = records[range_start:range_end]
+
+    if args.num_shards <= 0:
+        raise SystemExit("--num-shards must be positive")
+    if not 0 <= args.shard_index < args.num_shards:
+        raise SystemExit(
+            f"--shard-index must be in [0, {args.num_shards}), "
+            f"found {args.shard_index}"
+        )
+    range_record_count = len(records)
+    shard_start = range_record_count * args.shard_index // args.num_shards
+    shard_end = range_record_count * (args.shard_index + 1) // args.num_shards
+    records = records[shard_start:shard_end]
+    if not records:
+        raise SystemExit(
+            f"Question shard {args.shard_index}/{args.num_shards} is empty "
+            f"for {range_record_count} range-selected questions"
+        )
+    absolute_start = range_start + shard_start
+    absolute_end = range_start + shard_end
     cases = build_experiment_cases(records, args.model)
+    if args.prompt_condition != "all":
+        cases = [
+            case
+            for case in cases
+            if case.prompt_condition == args.prompt_condition
+        ]
+    if not cases:
+        raise SystemExit(
+            f"No cases remain for prompt condition {args.prompt_condition!r}"
+        )
     print(
         f"selected {len(records)} questions and {len(cases)} cases "
-        f"for {args.model}"
+        f"for {args.model}; shard={args.shard_index}/{args.num_shards} "
+        f"question_range=[{absolute_start}, {absolute_end}) "
+        f"of {selected_record_count}; prompt_condition={args.prompt_condition}"
     )
     if args.dry_run:
         args.output_dir.mkdir(parents=True, exist_ok=True)

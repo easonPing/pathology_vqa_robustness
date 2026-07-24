@@ -7,8 +7,8 @@ __pycache__/
 /models/
 /third_party/SlideChat/
 /results/
+/outputs/
 
 # Local scheduler logs.
-logs/exp2_*.out
-logs/exp2_*.err
+/logs/
 .DS_Store

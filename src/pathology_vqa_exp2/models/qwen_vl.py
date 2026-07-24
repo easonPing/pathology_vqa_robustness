@@ -18,7 +18,7 @@ class QwenVLAdapter(ModelAdapter):
         hf_home: str | Path,
         device: str = "auto",
         dtype: str = "bfloat16",
-        max_new_tokens: int = 64,
+        max_new_tokens: int = 512,
         revision: str | None = None,
     ) -> None:
         cache_root = configure_huggingface_cache(hf_home)

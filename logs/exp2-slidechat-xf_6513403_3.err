@@ -1,10 +1,0 @@
-Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
-Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:33<01:41, 33.99s/it]Loading checkpoint shards:  50%|█████     | 2/4 [01:07<01:07, 33.59s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [01:40<00:33, 33.46s/it]Loading checkpoint shards: 100%|██████████| 4/4 [02:11<00:00, 32.34s/it]Loading checkpoint shards: 100%|██████████| 4/4 [02:11<00:00, 32.81s/it]
-Traceback (most recent call last):
-  File "/u/efk4ps/UVA/RISE_lab/pathology_vqa_robustness/scripts/run_experiment.py", line 223, in <module>
-    main()
-  File "/u/efk4ps/UVA/RISE_lab/pathology_vqa_robustness/scripts/run_experiment.py", line 213, in main
-    run_cases(
-  File "/u/efk4ps/UVA/RISE_lab/pathology_vqa_robustness/src/pathology_vqa_exp2/runner.py", line 363, in run_cases
-    raise RuntimeError(row["error"])
-RuntimeError: OutOfMemoryError: CUDA out of memory. Tried to allocate 11.32 GiB. GPU 0 has a total capacity of 23.46 GiB of which 656.88 MiB is free. Including non-PyTorch memory, this process has 22.81 GiB memory in use. Of the allocated memory 21.98 GiB is allocated by PyTorch, and 647.72 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
